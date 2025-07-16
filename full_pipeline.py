@@ -7,9 +7,8 @@ Includes API usage, proper error handling, and result saving.
 import sys
 import os
 import argparse
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.pipeline.digest_pipeline import DigestPipeline
+from pipeline.digest_pipeline import DigestPipeline
 
 
 def main():

@@ -12,7 +12,7 @@ transformers
 sentence-transformers
 
 # Кластеризация
-sklearn
+# scikit-learn (уже установлен выше)
 
 # API для суммаризации (опционально)
 openai

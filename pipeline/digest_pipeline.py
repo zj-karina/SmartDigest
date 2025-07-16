@@ -3,14 +3,30 @@
 import os
 import time
 import json
+import numpy as np
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
-from ..collectors.rss_collector import NewsCollector
-from ..classifiers.news_classifier import NewsClassifier
-from ..clustering.news_clusterer import NewsClusterer
-from ..summarization.news_summarizer import NewsSummarizer
+from collectors.rss_collector import NewsCollector
+from classifiers.news_classifier import NewsClassifier
+from clustering.news_clusterer import NewsClusterer
+from summarization.news_summarizer import NewsSummarizer
 
+def convert_numpy_types(obj):
+    """Конвертирует numpy типы в обычные Python типы для JSON сериализации."""
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, np.bool_):
+        return bool(obj)
+    elif isinstance(obj, dict):
+        return {key: convert_numpy_types(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy_types(item) for item in obj]
+    return obj
 
 class DigestPipeline:
     """Complete news processing pipeline: collect → classify → cluster → summarize."""
@@ -216,7 +232,7 @@ class DigestPipeline:
                         clean_clusters[category].append(clean_cluster)
                 
                 with open(clusters_file, 'w', encoding='utf-8') as f:
-                    json.dump(clean_clusters, f, indent=2, ensure_ascii=False)
+                    json.dump(convert_numpy_types(clean_clusters), f, indent=2, ensure_ascii=False)
                 saved_files['clusters'] = clusters_file
                 print(f"   🔍 Clusters: {clusters_file}")
             
@@ -224,7 +240,7 @@ class DigestPipeline:
             if self.digest:
                 digest_file = f"results/digest_{timestamp}.json"
                 with open(digest_file, 'w', encoding='utf-8') as f:
-                    json.dump(self.digest, f, indent=2, ensure_ascii=False)
+                    json.dump(convert_numpy_types(self.digest), f, indent=2, ensure_ascii=False)
                 saved_files['digest'] = digest_file
                 print(f"   📝 Digest: {digest_file}")
                 

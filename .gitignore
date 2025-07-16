@@ -1,0 +1,6 @@
+classifiers/__pycache__/
+clustering/__pycache__/
+collectors/__pycache__/
+pipeline/__pycache__/
+results/
+summarization/__pycache__/

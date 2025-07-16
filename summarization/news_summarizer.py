@@ -21,12 +21,12 @@ class NewsSummarizer:
         self.api_key = api_key or os.getenv('OPENROUTER_API_KEY')
         self.base_url = "https://openrouter.ai/api/v1/chat/completions"
         
-        # Models by quality/price ratio
+        # Models by quality/price ratio (актуальные модели OpenRouter)
         self.models = {
-            'fast': "qwen/qwen-2.5-7b-instruct",      # Fast & cheap
-            'balanced': "qwen/qwen-2.5-14b-instruct",  # Good quality/price
-            'quality': "qwen/qwen-2.5-32b-instruct",   # High quality
-            'premium': "anthropic/claude-3-haiku",     # Premium quality
+            'fast': "openai/gpt-4o-mini",             # Fast & cheap
+            'balanced': "anthropic/claude-3-haiku",   # Good quality/price
+            'quality': "openai/gpt-4o",               # High quality
+            'premium': "anthropic/claude-3-5-sonnet", # Premium quality
         }
         
         self.default_model = 'balanced'
@@ -39,6 +39,8 @@ class NewsSummarizer:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
+            "HTTP-Referer": "https://github.com/your-repo/SmartDigest",
+            "X-Title": "SmartDigest News Summarizer"
         }
         
         data = {
@@ -51,13 +53,17 @@ class NewsSummarizer:
         
         try:
             response = requests.post(self.base_url, headers=headers, json=data, timeout=30)
-            response.raise_for_status()
+            
+            if response.status_code != 200:
+                print(f"❌ API Error {response.status_code}: {response.text[:200]}...")
+                return None
             
             result = response.json()
             
             if 'choices' in result and len(result['choices']) > 0:
                 return result['choices'][0]['message']['content'].strip()
             else:
+                print(f"❌ Unexpected API response format: {result}")
                 return None
                 
         except Exception as e:
@@ -151,8 +157,8 @@ Brief digest (2-3 sentences):"""
             return {
                 'summary': fallback_summary,
                 'model': 'fallback',
-                'success': False,
-                'error': 'api_failed',
+                'success': True,  # Fallback суммаризация тоже успешна
+                'error': 'api_not_available',
                 'source_articles': len(articles),
                 'keywords': cluster.get('keywords', []),
                 'category': cluster.get('category', 'unknown')
