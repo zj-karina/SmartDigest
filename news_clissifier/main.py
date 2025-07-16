@@ -21,11 +21,14 @@ from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
+from sklearn.ensemble import VotingClassifier
 from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
 import torch
 from openai import OpenAI
 from langdetect import detect
 import re
+import warnings
+warnings.filterwarnings('ignore')
 
 class NewsCollector:
     """Simple news collector from RSS feeds"""
@@ -107,45 +110,95 @@ class FreeClassifier:
             'crime': 'Police, arrests, courts, investigations, criminal activity'
         }
         
-        # Keywords for rule-based classification
+        # Расширенные ключевые слова для каждой категории
         self.category_keywords = {
-            'politics': ['government', 'election', 'president', 'congress', 'senate', 'parliament', 'minister', 'politician', 'vote', 'law', 'policy'],
-            'business': ['company', 'business', 'market', 'stock', 'finance', 'economy', 'bank', 'trade', 'revenue', 'profit', 'investment'],
-            'technology': ['technology', 'tech', 'ai', 'computer', 'software', 'startup', 'apple', 'google', 'microsoft', 'innovation'],
-            'sports': ['sports', 'football', 'basketball', 'soccer', 'team', 'player', 'game', 'match', 'championship', 'olympics'],
-            'entertainment': ['movie', 'film', 'music', 'celebrity', 'actor', 'singer', 'show', 'tv', 'entertainment', 'arts'],
-            'health': ['health', 'medical', 'doctor', 'hospital', 'treatment', 'vaccine', 'disease', 'patient', 'medicine'],
-            'science': ['science', 'research', 'study', 'discovery', 'scientist', 'climate', 'environment', 'space', 'nature'],
-            'world': ['international', 'global', 'country', 'nation', 'world', 'foreign', 'diplomatic', 'war', 'conflict'],
-            'crime': ['crime', 'police', 'arrest', 'court', 'investigation', 'murder', 'fraud', 'trial', 'criminal', 'law enforcement']
+            'politics': ['government', 'election', 'president', 'congress', 'senate', 'parliament', 'minister', 'politician', 'vote', 'law', 'policy', 'democratic', 'republican', 'campaign', 'administration'],
+            'business': ['company', 'business', 'market', 'stock', 'finance', 'economy', 'bank', 'trade', 'revenue', 'profit', 'investment', 'earnings', 'corporate', 'startup', 'ipo'],
+            'technology': ['technology', 'tech', 'ai', 'computer', 'software', 'startup', 'apple', 'google', 'microsoft', 'innovation', 'digital', 'cybersecurity', 'blockchain', 'cryptocurrency'],
+            'sports': ['sports', 'football', 'basketball', 'soccer', 'team', 'player', 'game', 'match', 'championship', 'olympics', 'baseball', 'tennis', 'golf', 'hockey', 'tournament'],
+            'entertainment': ['movie', 'film', 'music', 'celebrity', 'actor', 'singer', 'show', 'tv', 'entertainment', 'arts', 'hollywood', 'concert', 'album', 'streaming', 'netflix'],
+            'health': ['health', 'medical', 'doctor', 'hospital', 'treatment', 'vaccine', 'disease', 'patient', 'medicine', 'covid', 'pandemic', 'virus', 'drug', 'clinical', 'healthcare'],
+            'science': ['science', 'research', 'study', 'discovery', 'scientist', 'climate', 'environment', 'space', 'nature', 'nasa', 'experiment', 'biology', 'physics', 'chemistry'],
+            'world': ['international', 'global', 'country', 'nation', 'world', 'foreign', 'diplomatic', 'war', 'conflict', 'ukraine', 'china', 'russia', 'europe', 'asia', 'africa'],
+            'crime': ['crime', 'police', 'arrest', 'court', 'investigation', 'murder', 'fraud', 'trial', 'criminal', 'law enforcement', 'robbery', 'theft', 'violence', 'shooting']
         }
         
         self.models = {}
+        
+        # Продвинутые модели для тестирования
+        self.advanced_models = {
+            # E5 модели (Microsoft)
+            'e5_large': 'intfloat/e5-large-v2',
+            'e5_base': 'intfloat/e5-base-v2',
+            'e5_small': 'intfloat/e5-small-v2',
+            
+            # BGE модели (BAAI/Beijing Academy of AI)
+            'bge_large': 'BAAI/bge-large-en-v1.5',
+            'bge_base': 'BAAI/bge-base-en-v1.5',
+            'bge_small': 'BAAI/bge-small-en-v1.5',
+            
+            # MPNet модели
+            'mpnet_base': 'sentence-transformers/all-mpnet-base-v2',
+            
+            # Instructor модели (task-specific embeddings)
+            'instructor_large': 'hkunlp/instructor-large',
+            'instructor_base': 'hkunlp/instructor-base',
+            
+            # Multilingual модели
+            'multilingual_e5': 'intfloat/multilingual-e5-large',
+            'paraphrase_multilingual': 'sentence-transformers/paraphrase-multilingual-mpnet-base-v2',
+            
+            # Специализированные модели
+            'sentence_t5': 'sentence-transformers/sentence-t5-base',
+            'gtr_t5': 'sentence-transformers/gtr-t5-base',
+            
+            # Оригинальные (для сравнения)
+            'minilm': 'all-MiniLM-L6-v2',
+            'distilbert': 'sentence-transformers/all-distilroberta-v1',
+        }
     
     def load_model(self, model_type: str):
         """Load specified model"""
         if model_type in self.models:
             return
             
-        print(f"Loading {model_type}...")
+        print(f"🔄 Loading {model_type}...")
         
-        if model_type == 'sentence_bert':
-            self.models[model_type] = SentenceTransformer('all-MiniLM-L6-v2')
-        elif model_type == 'zero_shot_bart':
-            device = 0 if torch.cuda.is_available() else -1
-            self.models[model_type] = pipeline("zero-shot-classification", 
-                                             model="facebook/bart-large-mnli", 
-                                             device=device)
-        elif model_type == 'distilbert_classifier':
-            try:
-                # Try to load a pre-trained news classifier
-                self.models[model_type] = pipeline("text-classification", 
-                                                 model="cardiffnlp/twitter-roberta-base-emotion",
-                                                 device=0 if torch.cuda.is_available() else -1)
-            except:
-                # Fallback to zero-shot
-                self.models[model_type] = self.models.get('zero_shot_bart') or pipeline("zero-shot-classification", 
-                                                                                       model="facebook/bart-large-mnli")
+        try:
+            if model_type == 'sentence_bert':
+                self.models[model_type] = SentenceTransformer('all-MiniLM-L6-v2')
+            elif model_type == 'zero_shot_bart':
+                device = 0 if torch.cuda.is_available() else -1
+                self.models[model_type] = pipeline("zero-shot-classification", 
+                                                 model="facebook/bart-large-mnli", 
+                                                 device=device)
+            elif model_type == 'distilbert_classifier':
+                try:
+                    # Try to load a pre-trained news classifier
+                    self.models[model_type] = pipeline("text-classification", 
+                                                     model="cardiffnlp/twitter-roberta-base-emotion",
+                                                     device=0 if torch.cuda.is_available() else -1)
+                except:
+                    # Fallback to zero-shot
+                    self.models[model_type] = self.models.get('zero_shot_bart') or pipeline("zero-shot-classification", 
+                                                                                           model="facebook/bart-large-mnli")
+            elif model_type in self.advanced_models:
+                model_name = self.advanced_models[model_type]
+                
+                # Специальная обработка для Instructor моделей
+                if 'instructor' in model_type:
+                    from InstructorEmbedding import INSTRUCTOR
+                    self.models[model_type] = INSTRUCTOR(model_name)
+                else:
+                    self.models[model_type] = SentenceTransformer(model_name)
+            
+            print(f"✅ Loaded {model_type}")
+            
+        except Exception as e:
+            print(f"❌ Failed to load {model_type}: {e}")
+            # Fallback to MiniLM
+            if model_type != 'sentence_bert':
+                self.models[model_type] = SentenceTransformer('all-MiniLM-L6-v2')
     
     def classify_keyword_based(self, text: str) -> Dict[str, Any]:
         """Simple keyword-based classification"""
@@ -191,6 +244,54 @@ class FreeClassifier:
             'time': time.time() - start_time
         }
     
+    def classify_advanced_semantic(self, text: str, model_name: str) -> Dict[str, Any]:
+        """Classify using advanced semantic models"""
+        if model_name not in self.models:
+            self.load_model(model_name)
+        
+        start_time = time.time()
+        model = self.models[model_name]
+        
+        try:
+            # Специальная обработка для Instructor моделей
+            if 'instructor' in model_name:
+                # Instructor требует инструкции
+                instruction = "Represent the news article for classification: "
+                text_emb = model.encode([[instruction, text]])
+                cat_instructions = [[instruction, desc] for desc in self.category_descriptions.values()]
+                cat_embs = model.encode(cat_instructions)
+            else:
+                # E5 модели требуют префикса для лучшего качества
+                if 'e5' in model_name:
+                    text_with_prefix = f"query: {text}"
+                    cat_with_prefix = [f"passage: {desc}" for desc in self.category_descriptions.values()]
+                    text_emb = model.encode([text_with_prefix])
+                    cat_embs = model.encode(cat_with_prefix)
+                else:
+                    # Обычные модели
+                    text_emb = model.encode([text])
+                    cat_embs = model.encode(list(self.category_descriptions.values()))
+            
+            # Find best match
+            similarities = cosine_similarity(text_emb, cat_embs)[0]
+            best_idx = np.argmax(similarities)
+            
+            return {
+                'category': self.categories[best_idx],
+                'confidence': float(similarities[best_idx]),
+                'method': f'semantic_{model_name}',
+                'time': time.time() - start_time
+            }
+            
+        except Exception as e:
+            print(f"Error with {model_name}: {e}")
+            return {
+                'category': 'world',
+                'confidence': 0.0,
+                'method': f'semantic_{model_name}_error',
+                'time': time.time() - start_time
+            }
+    
     def classify_zero_shot(self, text: str) -> Dict[str, Any]:
         """Classify using zero-shot BART"""
         if 'zero_shot_bart' not in self.models:
@@ -204,6 +305,78 @@ class FreeClassifier:
             'category': result['labels'][0],
             'confidence': result['scores'][0],
             'method': 'zero_shot_bart',
+            'time': time.time() - start_time
+        }
+    
+    def classify_zero_shot_advanced(self, text: str) -> Dict[str, Any]:
+        """Classify using advanced zero-shot models"""
+        start_time = time.time()
+        
+        try:
+            # Попробуем разные zero-shot модели
+            device = 0 if torch.cuda.is_available() else -1
+            
+            # DeBERTa-v3 (лучше чем BART для классификации)
+            classifier = pipeline("zero-shot-classification", 
+                                model="microsoft/deberta-v3-base", 
+                                device=device)
+            
+            # Используем более детальные описания категорий
+            candidate_labels = list(self.category_descriptions.values())
+            result = classifier(text, candidate_labels)
+            
+            # Найдем соответствующую категорию
+            best_desc = result['labels'][0]
+            category = 'world'
+            for cat, desc in self.category_descriptions.items():
+                if desc == best_desc:
+                    category = cat
+                    break
+            
+            return {
+                'category': category,
+                'confidence': result['scores'][0],
+                'method': 'zero_shot_deberta',
+                'time': time.time() - start_time
+            }
+            
+        except Exception as e:
+            print(f"Error with advanced zero-shot: {e}")
+            return self.classify_zero_shot(text)
+    
+    def classify_ensemble(self, text: str, models_to_use: List[str] = None) -> Dict[str, Any]:
+        """Ensemble classification using multiple models"""
+        start_time = time.time()
+        
+        if models_to_use is None:
+            models_to_use = ['e5_base', 'bge_base', 'mpnet_base', 'minilm']
+        
+        predictions = []
+        confidences = []
+        
+        for model_name in models_to_use:
+            try:
+                result = self.classify_advanced_semantic(text, model_name)
+                predictions.append(result['category'])
+                confidences.append(result['confidence'])
+            except:
+                continue
+        
+        if not predictions:
+            return self.classify_semantic(text)
+        
+        # Взвешенное голосование
+        category_scores = {}
+        for pred, conf in zip(predictions, confidences):
+            category_scores[pred] = category_scores.get(pred, 0) + conf
+        
+        best_category = max(category_scores, key=category_scores.get)
+        avg_confidence = np.mean([conf for pred, conf in zip(predictions, confidences) if pred == best_category])
+        
+        return {
+            'category': best_category,
+            'confidence': float(avg_confidence),
+            'method': f'ensemble_{len(predictions)}models',
             'time': time.time() - start_time
         }
     
@@ -298,12 +471,50 @@ class FreeClassifier:
         
         return results
     
+    def classify_tfidf_ensemble(self, texts: List[str]) -> List[Dict[str, Any]]:
+        """Ensemble of TF-IDF based classifiers"""
+        start_time = time.time()
+        
+        train_texts = list(self.category_descriptions.values()) * 5
+        train_labels = self.categories * 5
+        
+        # Подготовка данных
+        tfidf = TfidfVectorizer(max_features=3000, stop_words='english')
+        X_train = tfidf.fit_transform(train_texts)
+        X_test = tfidf.transform(texts)
+        
+        # Ensemble из разных классификаторов
+        ensemble = VotingClassifier([
+            ('nb', MultinomialNB()),
+            ('svm', SVC(probability=True, kernel='linear')),
+            ('rf', RandomForestClassifier(n_estimators=50, random_state=42)),
+            ('lr', LogisticRegression(random_state=42, max_iter=1000))
+        ], voting='soft')
+        
+        ensemble.fit(X_train, train_labels)
+        predictions = ensemble.predict(X_test)
+        probabilities = ensemble.predict_proba(X_test)
+        
+        results = []
+        processing_time = (time.time() - start_time) / len(texts)
+        
+        for i, text in enumerate(texts):
+            confidence = float(np.max(probabilities[i]))
+            results.append({
+                'category': predictions[i],
+                'confidence': confidence,
+                'method': 'tfidf_ensemble',
+                'time': processing_time
+            })
+        
+        return results
+    
     def classify_batch(self, news_list: List[Dict], method: str = 'semantic') -> List[Dict]:
         """Classify multiple news items"""
         results = []
         
         # For batch methods (TF-IDF based)
-        if method in ['tfidf_nb', 'tfidf_svm', 'tfidf_rf']:
+        if method in ['tfidf_nb', 'tfidf_svm', 'tfidf_rf', 'tfidf_ensemble']:
             texts = [f"{news['title']}. {news.get('description', '')}" for news in news_list]
             
             if method == 'tfidf_nb':
@@ -312,6 +523,8 @@ class FreeClassifier:
                 classifications = self.classify_tfidf_svm(texts)
             elif method == 'tfidf_rf':
                 classifications = self.classify_tfidf_rf(texts)
+            elif method == 'tfidf_ensemble':
+                classifications = self.classify_tfidf_ensemble(texts)
             
             for i, news in enumerate(news_list):
                 news_result = news.copy()
@@ -333,6 +546,12 @@ class FreeClassifier:
                 result = self.classify_semantic(text)
             elif method == 'zero_shot':
                 result = self.classify_zero_shot(text)
+            elif method == 'zero_shot_advanced':
+                result = self.classify_zero_shot_advanced(text)
+            elif method == 'ensemble':
+                result = self.classify_ensemble(text)
+            elif method in self.advanced_models:
+                result = self.classify_advanced_semantic(text, method)
             else:
                 raise ValueError(f"Unknown method: {method}")
             
@@ -442,7 +661,8 @@ class ExperimentRunner:
         self.free_classifier = FreeClassifier()
         self.llm_classifier = LLMClassifier(api_key) if api_key else None
         
-    def run_experiment(self, news_count: int = 50, test_all_llms: bool = False):
+    def run_experiment(self, news_count: int = 50, test_all_llms: bool = False, 
+                      test_mode: str = 'all', skip_slow: bool = False):
         """Run the complete experiment"""
         print("🚀 Starting COMPREHENSIVE News Classification Experiment")
         print("="*60)
@@ -455,23 +675,67 @@ class ExperimentRunner:
         
         results = {}
         
-        # Step 2: Test ALL free methods
-        print("\n💰 Testing FREE methods:")
+        # Step 2: Test FREE methods based on mode
+        print(f"\n💰 Testing FREE methods (mode: {test_mode}):")
         
-        free_methods = [
+        # Базовые методы
+        basic_methods = [
             ('keyword', 'Keyword-based'),
-            ('semantic', 'BERT Semantic'),
+            ('semantic', 'BERT Semantic (MiniLM)'),
             ('zero_shot', 'Zero-shot BART'),
+            ('zero_shot_advanced', 'Zero-shot DeBERTa'),
+        ]
+        
+        # Продвинутые эмбеддинг модели
+        advanced_semantic_methods = [
+            ('e5_base', 'E5-Base (Microsoft)'),
+            ('bge_base', 'BGE-Base (BAAI)'),
+            ('mpnet_base', 'MPNet-Base'),
+            ('sentence_t5', 'Sentence-T5'),
+            ('minilm', 'MiniLM (Reference)'),
+        ]
+        
+        # Медленные продвинутые модели (пропускаем если skip_slow=True)
+        if not skip_slow:
+            advanced_semantic_methods.extend([
+                ('e5_large', 'E5-Large (Microsoft)'),
+                ('bge_large', 'BGE-Large (BAAI)'),
+                ('instructor_base', 'Instructor-Base'),
+                ('multilingual_e5', 'Multilingual E5'),
+                ('gtr_t5', 'GTR-T5'),
+            ])
+        
+        # TF-IDF методы
+        tfidf_methods = [
             ('tfidf_nb', 'TF-IDF + Naive Bayes'),
             ('tfidf_svm', 'TF-IDF + SVM'),
             ('tfidf_rf', 'TF-IDF + Random Forest'),
+            ('tfidf_ensemble', 'TF-IDF Ensemble'),
         ]
+        
+        # Ensemble методы
+        ensemble_methods = [
+            ('ensemble', 'Ensemble (4 models)'),
+        ]
+        
+        # Выбираем методы в зависимости от режима
+        if test_mode == 'basic':
+            free_methods = basic_methods + tfidf_methods[:2]  # Только базовые + 2 TF-IDF
+        elif test_mode == 'advanced':
+            free_methods = advanced_semantic_methods
+        elif test_mode == 'ensemble':
+            free_methods = ensemble_methods + tfidf_methods[-1:]  # Ensemble методы
+        else:  # 'all'
+            free_methods = basic_methods + advanced_semantic_methods + tfidf_methods + ensemble_methods
+        
+        print(f"📋 Selected {len(free_methods)} methods for testing")
         
         for method_key, method_name in free_methods:
             print(f"  🔸 {method_name}...")
             try:
                 method_results = self.free_classifier.classify_batch(news_data, method_key)
                 results[f'free_{method_key}'] = method_results
+                print(f"    ✅ Completed: {len(method_results)} classified")
             except Exception as e:
                 print(f"    ❌ Error: {e}")
                 results[f'free_{method_key}'] = []
@@ -611,11 +875,15 @@ def main():
     """Main function"""
     import argparse
     
-    parser = argparse.ArgumentParser(description='Comprehensive news classification comparison')
+    parser = argparse.ArgumentParser(description='🚀 Comprehensive News Classification Comparison')
     parser.add_argument('--api-key', help='OpenRouter API key for LLM testing (optional)')
-    parser.add_argument('--count', type=int, default=50, help='Number of news to classify')
+    parser.add_argument('--count', type=int, default=50, help='Number of news to classify (default: 50)')
     parser.add_argument('--free-only', action='store_true', help='Test only free methods')
     parser.add_argument('--all-llms', action='store_true', help='Test all LLM models (expensive!)')
+    parser.add_argument('--basic-only', action='store_true', help='Test only basic methods (faster)')
+    parser.add_argument('--advanced-only', action='store_true', help='Test only advanced embedding methods')
+    parser.add_argument('--ensemble-only', action='store_true', help='Test only ensemble methods')
+    parser.add_argument('--skip-slow', action='store_true', help='Skip slow models (large models)')
     
     args = parser.parse_args()
     
@@ -630,9 +898,22 @@ def main():
         print("   Use --api-key or set OPENROUTER_API_KEY environment variable")
         print("   Or use --free-only flag")
     
-    # Run experiment
+    # Run experiment with mode selection
     runner = ExperimentRunner(api_key)
-    runner.run_experiment(args.count, args.all_llms)
+    
+    # Determine test mode
+    test_mode = 'all'
+    if args.basic_only:
+        test_mode = 'basic'
+        print("🎯 Testing BASIC methods only")
+    elif args.advanced_only:
+        test_mode = 'advanced'
+        print("🔬 Testing ADVANCED embedding methods only")
+    elif args.ensemble_only:
+        test_mode = 'ensemble'
+        print("🤝 Testing ENSEMBLE methods only")
+    
+    runner.run_experiment(args.count, args.all_llms, test_mode, args.skip_slow)
 
 if __name__ == "__main__":
     main() 

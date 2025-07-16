@@ -1,0 +1,22 @@
+# Базовые зависимости для классификации новостей
+feedparser
+pandas
+numpy
+requests
+scikit-learn
+langdetect
+
+# Основные ML библиотеки
+torch
+transformers
+sentence-transformers
+
+# Кластеризация
+sklearn
+
+# API для суммаризации (опционально)
+openai
+requests
+
+# Утилиты
+tqdm 
