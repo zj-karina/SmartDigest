@@ -27,6 +27,8 @@ def convert_numpy_types(obj):
         return {key: convert_numpy_types(value) for key, value in obj.items()}
     elif isinstance(obj, list):
         return [convert_numpy_types(item) for item in obj]
+    elif hasattr(obj, 'isoformat'):  # datetime objects
+        return obj.isoformat()
     return obj
 
 class EnhancedDigestPipeline:
@@ -128,22 +130,46 @@ class EnhancedDigestPipeline:
         print(f"   💾 Сохранение в БД: {'✅' if save_to_db and self.use_database else '❌'}")
         
         try:
-            # Шаг 1: Сбор новостей
-            print(f"\n📰 ШАГ 1: Сбор новостей")
+            # Шаг 1: Чтение новостей из MongoDB
+            print(f"\n📰 ШАГ 1: Чтение новостей из MongoDB")
             print("-" * 25)
             
             start_time = time.time()
-            self.raw_news = self.collector.collect_news(news_count)
-            collection_time = time.time() - start_time
+            
+            if self.use_database and self.db_manager:
+                # Читаем новости из MongoDB
+                self.raw_news = self.db_manager.get_articles(limit=news_count)
+                print(f"📊 Прочитано {len(self.raw_news)} статей из MongoDB")
+                
+                # Конвертируем формат MongoDB в формат для классификации
+                converted_news = []
+                for article in self.raw_news:
+                    converted_article = {
+                        'title': article.get('title', ''),
+                        'description': article.get('summary', ''),  # summary вместо description
+                        'url': article.get('url', ''),
+                        'source': article.get('url', '').split('/')[2] if article.get('url') else 'unknown',
+                        'published': article.get('publish_date'),
+                        'language': 'english'  # Предполагаем английский
+                    }
+                    converted_news.append(converted_article)
+                
+                self.raw_news = converted_news
+                collection_time = time.time() - start_time
+                print(f"✅ Прочитано {len(self.raw_news)} статей за {collection_time:.1f}с")
+            else:
+                # Fallback на RSS сбор
+                print("⚠️ База данных недоступна, используем RSS сбор")
+                self.raw_news = self.collector.collect_news(news_count)
+                collection_time = time.time() - start_time
+                print(f"✅ Собрано {len(self.raw_news)} статей за {collection_time:.1f}с")
             
             if not self.raw_news:
-                print("❌ Новости не собраны!")
+                print("❌ Новости не найдены!")
                 return {}
             
-            print(f"✅ Собрано {len(self.raw_news)} статей за {collection_time:.1f}с")
-            
-            # Сохранение сырых данных в БД
-            if self.use_database and save_to_db:
+            # Сохранение сырых данных в БД (отключено для режима только чтения)
+            if self.use_database and save_to_db and False:  # Отключено
                 print("💾 Сохранение статей в БД...")
                 saved_ids = self.db_manager.save_articles(self.raw_news)
                 print(f"✅ Сохранено {len(saved_ids)} статей в БД")
@@ -239,8 +265,8 @@ class EnhancedDigestPipeline:
             if save_results:
                 self.save_results()
             
-            # Сохранение в БД
-            if self.use_database and save_to_db:
+            # Сохранение в БД (отключено для режима только чтения)
+            if self.use_database and save_to_db and False:  # Отключено
                 self.save_to_database()
             
             return self.digest
@@ -318,23 +344,7 @@ class EnhancedDigestPipeline:
                 saved_files['classification'] = classification_file
                 print(f"📊 Классификация: {classification_file}")
             
-            # Сохранение нерелевантных статей отдельно
-            if self.irrelevant_news:
-                irrelevant_file = f'results/irrelevant_{timestamp}.json'
-                irrelevant_data = {
-                    'metadata': {
-                        'timestamp': timestamp,
-                        'count': len(self.irrelevant_news),
-                        'threshold': self.relevance_threshold
-                    },
-                    'articles': convert_numpy_types(self.irrelevant_news)
-                }
-                
-                with open(irrelevant_file, 'w', encoding='utf-8') as f:
-                    json.dump(irrelevant_data, f, indent=2, ensure_ascii=False)
-                
-                saved_files['irrelevant'] = irrelevant_file
-                print(f"🗑️ Нерелевантные: {irrelevant_file}")
+            # Сохранение нерелевантных статей отключено для режима только чтения
             
             # Сохранение кластеров
             if self.clusters:

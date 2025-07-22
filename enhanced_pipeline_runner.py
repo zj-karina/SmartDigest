@@ -107,38 +107,20 @@ def main():
                 print(f"📰 Статей собрано: {pipeline_stats.get('articles_collected', 0)}")
                 print(f"🗂️ Статей классифицировано: {pipeline_stats.get('articles_classified', 0)}")
                 print(f"✅ Релевантных статей: {pipeline_stats.get('relevant_articles', 0)}")
-                print(f"❌ Нерелевантных статей: {pipeline_stats.get('irrelevant_articles', 0)}")
                 print(f"📊 Событий создано: {pipeline_stats.get('events_created', 0)}")
                 print(f"🎯 Порог релевантности: {pipeline_stats.get('relevance_threshold', 0)}")
                 
-                # Статистика БД если доступна
-                if 'database' in stats:
-                    db_stats = stats['database']
-                    print(f"\n💾 СТАТИСТИКА БД")
-                    print("-" * 30)
-                    print(f"📰 Всего статей в БД: {db_stats.get('total_articles', 0)}")
-                    print(f"✅ Релевантных в БД: {db_stats.get('relevant_articles', 0)}")
-                    print(f"❌ Нерелевантных в БД: {db_stats.get('irrelevant_articles', 0)}")
-                    print(f"📝 Дайджестов в БД: {db_stats.get('total_digests', 0)}")
-                    
-                    # Топ категории
-                    categories = db_stats.get('categories', [])
-                    if categories:
-                        print(f"\n🏷️ Топ категории в БД:")
-                        for cat_info in categories[:5]:
-                            print(f"   {cat_info['_id']}: {cat_info['count']}")
+                # Статистика БД отключена для режима только чтения
             
             print(f"\n🎉 Пайплайн завершен успешно!")
             print(f"📊 Обработано {len(pipeline.raw_news)} статей")
             print(f"✅ Релевантных: {len(pipeline.relevant_news)}")
-            print(f"❌ Нерелевантных: {len(pipeline.irrelevant_news)}")
             print(f"🎯 Создан дайджест с {len(digest.get('items', []))} событиями")
             
             if not args.no_save and not args.preview_only:
                 print(f"💾 Результаты сохранены в папку results/")
             
-            if not args.no_database and not args.preview_only:
-                print(f"🗄️ Результаты сохранены в MongoDB")
+            # MongoDB сохранение отключено для режима только чтения
         else:
             print("❌ Пайплайн завершился с ошибкой")
             return 1

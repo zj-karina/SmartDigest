@@ -35,14 +35,20 @@ class DatabaseManager:
         """Устанавливает подключение к MongoDB."""
         try:
             self.client = MongoClient(self.connection_string)
-            self.db = self.client.smartdigest
+            # Используем базу данных Prod вместо smartdigest
+            self.db = self.client.Prod
             
             # Проверяем соединение
             self.client.admin.command('ping')
             logger.info("✅ Подключение к MongoDB установлено")
             
-            # Создаем индексы
-            self._create_indexes()
+            # Создаем индексы только если есть права (отключено для режима только чтения)
+            # try:
+            #     self._create_indexes()
+            # except Exception as e:
+            #     logger.warning(f"⚠️ Не удалось создать индексы: {e}")
+            #     logger.info("📝 Продолжаем без индексов")
+            logger.info("📝 Индексы отключены для режима только чтения")
             
         except Exception as e:
             logger.error(f"❌ Ошибка подключения к MongoDB: {e}")
@@ -94,7 +100,8 @@ class DatabaseManager:
         if not articles:
             return []
         
-        collection = self.db.articles
+        # Используем коллекцию news_raw в базе Prod
+        collection = self.db.news_raw
         saved_ids = []
         
         # Обрабатываем статьи батчами
@@ -158,33 +165,29 @@ class DatabaseManager:
             category: Фильтр по категории
             source: Фильтр по источнику
             is_relevant: Фильтр по релевантности
-            date_from: Фильтр по дате (статьи новее указанной даты)
+            date_from: Фильтр по дате (от)
             
         Returns:
             Список статей
         """
-        collection = self.db.articles
+        # Используем коллекцию news_raw в базе Prod
+        collection = self.db.news_raw
         
-        # Строим фильтр
-        filter_query = {}
+        # Строим запрос
+        query = {}
+        
         if category:
-            filter_query['category'] = category
+            query['meta.labels'] = {'$in': [category]}
+        
         if source:
-            filter_query['source'] = source
-        if is_relevant is not None:
-            filter_query['is_relevant'] = is_relevant
+            query['url'] = {'$regex': source, '$options': 'i'}
+        
         if date_from:
-            filter_query['collected_at'] = {'$gte': date_from}
+            query['publish_date'] = {'$gte': date_from}
         
-        # Выполняем запрос
-        cursor = collection.find(filter_query).sort('collected_at', DESCENDING).limit(limit)
-        articles = list(cursor)
-        
-        # Конвертируем ObjectId в строки
-        for article in articles:
-            article['_id'] = str(article['_id'])
-        
-        return articles
+        # Получаем статьи
+        cursor = collection.find(query).sort('publish_date', -1).limit(limit)
+        return list(cursor)
     
     def save_digest(self, digest: Dict[str, Any], pipeline_config: Dict[str, Any]) -> str:
         """
