@@ -23,6 +23,21 @@ python examples/quick_demo.py
 
 # Full pipeline with 30 articles
 python examples/full_pipeline.py --news-count 30
+
+# 🆕 Enhanced pipeline with MongoDB and advanced filtering
+python enhanced_pipeline_runner.py --news-count 30 --stats
+```
+
+## 🆕 New Features (v2.0)
+
+- **MongoDB Integration**: Store articles, digests, and processing history
+- **Enhanced Categories**: 28 detailed categories vs 9 basic ones
+- **Relevance Filtering**: Automatic spam/clickbait/irrelevant content detection
+- **Advanced Statistics**: Detailed analytics and performance metrics
+
+### Quick test of new features:
+```bash
+python test_enhanced_features.py
 ```
 
 ## Project structure
@@ -104,6 +119,21 @@ python examples/full_pipeline.py --preview-only
 # With OpenRouter API for better summaries
 export OPENROUTER_API_KEY='your-key'
 python examples/full_pipeline.py --model quality
+
+# 🆕 Enhanced pipeline examples
+# Basic enhanced run with MongoDB
+export MONGODB_CONNECTION_STRING=""
+python enhanced_pipeline_runner.py --news-count 50 --stats
+
+# Enhanced with custom relevance threshold
+python enhanced_pipeline_runner.py \
+  --news-count 100 \
+  --relevance-threshold 0.7 \
+  --language english \
+  --stats
+
+# Without database (files only)
+python enhanced_pipeline_runner.py --no-database --preview-only
 ```
 
 ## Output formats
