@@ -71,8 +71,7 @@ class EnhancedDigestPipeline:
         if use_database:
             try:
                 connection_string = (mongodb_connection or 
-                                   os.getenv('MONGODB_CONNECTION_STRING') or
-                                   "mongodb+srv://karina:W9wsOtd9AGYkmvnY@cluster0.1wshziu.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
+                                   os.getenv('MONGODB_CONNECTION_STRING'))
                 self.db_manager = DatabaseManager(connection_string)
             except Exception as e:
                 print(f"⚠️ Ошибка подключения к БД: {e}")
